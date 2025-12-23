@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Solver – dedukcja reguł</title>
+<style>
+  body {
+    font-family: 'Arial', sans-serif;
+    background: #1e1e1e;
+    color: #eee;
+    margin: 0;
+    padding: 20px;
+  }
+
+  h2 {
+    text-align: center;
+    color: #ffcc00;
+  }
+
+  .board {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-bottom: 20px;
+    justify-content: center;
+  }
+
+  .ring {
+    background: #2a2a2a;
+    padding: 15px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 150px;
+    box-shadow: 0 0 10px rgba(255,255,255,0.1);
+  }
+
+  .ring label {
+    font-weight: bold;
+  }
+
+  select, input {
+    padding: 8px;
+    border-radius: 6px;
+    border: none;
+    font-size: 1rem;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  select {
+    cursor: pointer;
+    background: #333;
+    color: #eee;
+  }
+
+  input[type="number"] {
+    background: #444;
+    color: #fff;
+  }
+
+  button {
+    padding: 12px 20px;
+    margin: 10px 5px 0 0;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: 0.2s;
+  }
+
+  button:hover {
+    opacity: 0.9;
+  }
+
+  .btn-add { background: #28a745; color: #fff; }
+  .btn-reset { background: #dc3545; color: #fff; }
+
+  pre {
+    background: #222;
+    padding: 15px;
+    border-radius: 10px;
+    white-space: pre-wrap;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  .result {
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+
+<h2>Solver dedukcyjny (wiele tarcz) – Start od 0</h2>
+<p style="text-align:center;">Kolejność: <b>zewnętrzny → środek</b></p>
+
+<div class="board" id="board-container">
+  <div class="ring">
+    <label>1</label>
+    <select class="color"><option>blue</option><option>green</option><option>red</option><option>orange</option></select>
+    <input type="number" class="val" placeholder="Wartość">
+  </div>
+  <div class="ring">
+    <label>2</label>
+    <select class="color"><option>blue</option><option>green</option><option>red</option><option>orange</option></select>
+    <input type="number" class="val" placeholder="Wartość">
+  </div>
+  <div class="ring">
+    <label>3</label>
+    <select class="color"><option>blue</option><option>green</option><option>red</option><option>orange</option></select>
+    <input type="number" class="val" placeholder="Wartość">
+  </div>
+  <div class="ring">
+    <label>4</label>
+    <select class="color"><option>blue</option><option>green</option><option>red</option><option>orange</option></select>
+    <input type="number" class="val" placeholder="Wartość">
+  </div>
+</div>
+
+<div style="text-align:center;">
+  <button class="btn-add" onclick="addBoard()">➕ Dodaj tarczę</button>
+  <button class="btn-reset" onclick="resetAll()">🗑 Reset</button>
+</div>
+
+<pre id="out" class="result"></pre>
+
+<script>
+const colors = ["blue", "green", "red", "orange"];
+const ops = ["+", "-", "*", "/"];
+let globalSet = null;
+
+function apply(a, op, b) {
+  if (op === "+") return a + b;
+  if (op === "-") return a - b;
+  if (op === "*") return a * b;
+  if (op === "/") return b !== 0 ? a / b : null;
+}
+
+function permutations(arr) {
+  if (arr.length === 1) return [arr];
+  let res = [];
+  for (let i = 0; i < arr.length; i++) {
+    let rest = permutations(arr.slice(0, i).concat(arr.slice(i + 1)));
+    for (let r of rest) res.push([arr[i], ...r]);
+  }
+  return res;
+}
+
+function addBoard() {
+  const ringColors = [...document.querySelectorAll(".color")].map(e => e.value);
+  const vals = [...document.querySelectorAll(".val")].map(e => Number(e.value));
+  const valid = new Set();
+  const opPerms = permutations(ops);
+
+  for (let perm of opPerms) {
+    let map = {};
+    colors.forEach((c, i) => map[c] = perm[i]);
+
+    for (let dir of ["OUT→IN", "IN→OUT"]) {
+      let order = dir === "OUT→IN" ? [...vals.keys()] : [...vals.keys()].reverse();
+      let value = 0;
+      let ok = true;
+
+      for (let i = 0; i < order.length; i++) {
+        let idx = order[i];
+        let op = map[ringColors[idx]];
+        value = apply(value, op, vals[idx]);
+        if (value === null || !Number.isInteger(value)) {
+          ok = false;
+          break;
+        }
+      }
+
+      if (ok) valid.add(JSON.stringify({ map, dir }));
+    }
+  }
+
+  if (globalSet === null) {
+    globalSet = valid;
+  } else {
+    globalSet = new Set([...globalSet].filter(x => valid.has(x)));
+  }
+
+  render();
+}
+
+function render() {
+  const out = document.getElementById("out");
+  out.textContent = "";
+
+  if (!globalSet || globalSet.size === 0) {
+    out.textContent = "❌ Brak spójnej teorii – któraś tarcza łamie reguły";
+    return;
+  }
+
+  let i = 1;
+  for (let entry of globalSet) {
+    const { map, dir } = JSON.parse(entry);
+    out.textContent +=
+`✔ Rozwiązanie ${i++}
+Kierunek: ${dir}
+blue=${map.blue}, green=${map.green},
+red=${map.red}, orange=${map.orange}
+
+`;
+  }
+}
+
+function resetAll() {
+  globalSet = null;
+  document.getElementById("out").textContent = "Zresetowano dane.";
+}
+</script>
+
+</body>
+</html>
