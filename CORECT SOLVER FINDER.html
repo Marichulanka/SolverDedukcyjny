@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<title>Solver – dedukcja reguł</title>
+<title>Solver Dedukcyjny - BASIC</title>
 <style>
   body {
     font-family: 'Arial', sans-serif;
@@ -53,11 +53,28 @@
     cursor: pointer;
     background: #333;
     color: #eee;
+    border: 1px solid #555;
+    transition: background-color 0.3s, color 0.3s;
+  }
+
+  select:focus {
+    outline: 2px solid #ffcc00;
+    border-color: #ffcc00;
+  }
+
+  select:hover {
+    background: #444;
   }
 
   input[type="number"] {
     background: #444;
     color: #fff;
+    border: 1px solid #555;
+  }
+
+  input[type="number"]:focus {
+    outline: 2px solid #ffcc00;
+    border-color: #ffcc00;
   }
 
   button {
@@ -77,23 +94,30 @@
   .btn-add { background: #28a745; color: #fff; }
   .btn-reset { background: #dc3545; color: #fff; }
 
-  pre {
+  .result {
+    margin-top: 20px;
     background: #222;
     padding: 15px;
     border-radius: 10px;
-    white-space: pre-wrap;
-    max-height: 400px;
+    max-height: 800px;
     overflow-y: auto;
+    font-family: 'Arial', sans-serif;
+    line-height: 1.6;
   }
 
-  .result {
-    margin-top: 20px;
+  .result h3 {
+    color: #ffcc00;
+    margin-bottom: 10px;
+  }
+
+  .result p {
+    margin: 5px 0;
   }
 </style>
 </head>
 <body>
 
-<h2>Solver dedukcyjny (wiele tarcz) – Start od 0</h2>
+<h2>Solver dedukcyjny (BASIC TARCZE) – Start od 0</h2>
 <p style="text-align:center;">Kolejność: <b>zewnętrzny → środek</b></p>
 
 <div class="board" id="board-container">
@@ -122,14 +146,40 @@
 <div style="text-align:center;">
   <button class="btn-add" onclick="addBoard()">➕ Dodaj tarczę</button>
   <button class="btn-reset" onclick="resetAll()">🗑 Reset</button>
+  <button id="bullseyeBtn" class="btn-add" onclick="toggleBullseye()">Bullseye: OFF</button>
 </div>
 
-<pre id="out" class="result"></pre>
+<div id="out" class="result"></div>
 
 <script>
 const colors = ["blue", "green", "red", "orange"];
 const ops = ["+", "-", "*", "/"];
 let globalSet = null;
+let uiBoards = [];
+let bullseye = false;
+
+// Inicjalizacja koloru select
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.color').forEach(sel => {
+    sel.addEventListener('change', function() {
+      const color = this.value;
+      this.style.backgroundColor = color;
+      this.style.color = (color === 'orange' || color === 'yellow') ? '#000' : '#fff';
+    });
+    // Ustaw początkowy kolor
+    const initialColor = sel.value;
+    sel.style.backgroundColor = initialColor;
+    sel.style.color = (initialColor === 'orange' || initialColor === 'yellow') ? '#000' : '#fff';
+  });
+
+  // Początkowy tekst w out
+  document.getElementById("out").innerHTML = "<p>Wpisz lub wybierz plik z tarczami aby rozpocząć</p>";
+});
+
+function toggleBullseye() {
+  bullseye = !bullseye;
+  document.getElementById('bullseyeBtn').textContent = `Bullseye: ${bullseye ? 'ON' : 'OFF'}`;
+}
 
 function apply(a, op, b) {
   if (op === "+") return a + b;
@@ -149,8 +199,19 @@ function permutations(arr) {
 }
 
 function addBoard() {
-  const ringColors = [...document.querySelectorAll(".color")].map(e => e.value);
-  const vals = [...document.querySelectorAll(".val")].map(e => Number(e.value));
+  const rings = [...document.querySelectorAll(".ring")].map(ring => {
+    const color = ring.querySelector(".color").value;
+    const val = Number(ring.querySelector(".val").value);
+    return {color, val};
+  });
+  processBoard(rings);
+  uiBoards.push(rings);
+  render();
+}
+
+function processBoard(rings) {
+  const ringColors = rings.map(r => r.color);
+  const vals = rings.map(r => r.val);
   const valid = new Set();
   const opPerms = permutations(ops);
 
@@ -182,35 +243,48 @@ function addBoard() {
   } else {
     globalSet = new Set([...globalSet].filter(x => valid.has(x)));
   }
-
-  render();
 }
 
 function render() {
   const out = document.getElementById("out");
-  out.textContent = "";
+  out.innerHTML = "";
 
   if (!globalSet || globalSet.size === 0) {
-    out.textContent = "❌ Brak spójnej teorii – któraś tarcza łamie reguły";
+    out.innerHTML = "<p>❌ Brak spójnej teorii – któraś tarcza łamie reguły</p>";
     return;
   }
 
   let i = 1;
   for (let entry of globalSet) {
     const { map, dir } = JSON.parse(entry);
-    out.textContent +=
-`✔ Rozwiązanie ${i++}
-Kierunek: ${dir}
-blue=${map.blue}, green=${map.green},
-red=${map.red}, orange=${map.orange}
+    out.innerHTML += `<h3>✔ Rozwiązanie ${i++}</h3>`;
+    out.innerHTML += `<p><strong>Kierunek:</strong> ${dir}</p>`;
+    out.innerHTML += `<p><strong>Mapowanie:</strong> blue=${map.blue}, green=${map.green}, red=${map.red}, orange=${map.orange}</p>`;
+    out.innerHTML += `<p><strong>Wynik dla ostatniej tarczy:</strong> `;
 
-`;
+    if (uiBoards.length > 0) {
+      const board = uiBoards[uiBoards.length - 1];
+      const ringColors = board.map(r => r.color);
+      const vals = board.map(r => r.val);
+      let order = dir === "OUT→IN" ? [...vals.keys()] : [...vals.keys()].reverse();
+      let value = 0;
+      for (let j = 0; j < order.length; j++) {
+        let idx = order[j];
+        let op = map[ringColors[idx]];
+        value = apply(value, op, vals[idx]);
+      }
+      if (bullseye) value = Math.pow(value, 2);
+      out.innerHTML += `${value}</p>`;
+    } else {
+      out.innerHTML += `Brak tarcz z UI</p>`;
+    }
   }
 }
 
 function resetAll() {
   globalSet = null;
-  document.getElementById("out").textContent = "Zresetowano dane.";
+  uiBoards = [];
+  document.getElementById("out").innerHTML = "<p>Zresetowano dane.</p>";
 }
 </script>
 
